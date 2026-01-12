@@ -1,6 +1,36 @@
-.venv/
+# ---- Python bytecode ----
 __pycache__/
 *.pyc
-.ipynb_checkpoints/
+*.pyo
+*.pyd
+
+# ---- Virtual envs ----
+.venv/
+venv/
+env/
+
+# ---- OS / Editor junk ----
 .DS_Store
+.vscode/
+.idea/
+
+# ---- Jupyter ----
+.ipynb_checkpoints/
+
+# ---- Env files / secrets ----
 .env
+
+# ---- Testing / tooling caches ----
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---- Build artifacts ----
+build/
+dist/
+*.egg-info/
+
+# ---- Outputs (generated) ----
+outputs/
