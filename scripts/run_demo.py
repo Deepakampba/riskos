@@ -11,6 +11,97 @@ import pandas as pd
 from riskos.pipeline import run_pd_trend_and_ear, run_portfolio_pd_trend_and_ear
 from riskos.validation import DataContract, normalize_and_aggregate, validate_single_series
 
+def build_report_text(summary: dict, *, group_col: str, top_n: int = 5) -> str:
+    lines: list[str] = []
+
+    # ---- Portfolio headline (if present) ----
+    if "portfolio" in summary:
+        p = summary["portfolio"]
+        lines.append("Portfolio headline:")
+        lines.append(
+            f"Groups={p['n_groups']} | TotalExp={p['total_exposure']:,.0f} | "
+            f"EaR={p['exposure_at_risk_pct']:.1f}% ({p['exposure_at_risk']:,.0f} / {p['total_exposure']:,.0f})"
+        )
+        lines.append("")  # blank line
+
+    # ---- Single-series headline (if present) ----
+    if "pd_trend" in summary and "ear" in summary:
+        pd_s = summary.get("pd_trend", {})
+        ear = summary.get("ear", {})
+        lines.append("Headline:")
+        lines.append(
+            f"Tier={pd_s.get('tier','NA')} | slope={pd_s.get('slope_bps_per_q', float('nan')):.1f} bps/q | "
+            f"EaR={ear.get('exposure_at_risk_pct',0.0):.1f}% "
+            f"({ear.get('exposure_at_risk',0.0):,.0f} / {ear.get('total_exposure',0.0):,.0f}) | "
+            f"flagged_quarters={pd_s.get('flags',0)}/{pd_s.get('n_quarters',0)} | "
+            f"latest={pd_s.get('latest_quarter','NA')} flag={pd_s.get('latest_flag',0)}"
+        )
+        lines.append("")
+
+    # ---- Top Risk Groups ----
+    by_group = summary.get("by_group")
+    if by_group:
+        df_bg = pd.DataFrame(by_group)
+
+        required_cols = [group_col, "exposure_at_risk_pct", "slope_bps_per_q", "latest_flag", "tier"]
+        missing = [c for c in required_cols if c not in df_bg.columns]
+        if missing:
+            lines.append(f"Top Risk Groups: missing columns: {missing}")
+            lines.append(f"Available: {df_bg.columns.tolist()}")
+        else:
+            df_bg_sorted = df_bg.sort_values(
+                ["exposure_at_risk_pct", "slope_bps_per_q", "latest_flag"],
+                ascending=[False, False, False],
+                kind="mergesort",
+            )
+
+            lines.append(f"Top Risk Groups (ranked by EaR% → slope → latest_flag) | group_col={group_col}")
+            for i, row in enumerate(df_bg_sorted.head(top_n).itertuples(index=False), start=1):
+                group_value = getattr(row, group_col)
+                lines.append(
+                    f"{i}. {str(group_value):12s} | "
+                    f"EaR={row.exposure_at_risk_pct:5.1f}% | "
+                    f"slope={row.slope_bps_per_q:5.1f} bps/q | "
+                    f"latest_flag={int(row.latest_flag)} | "
+                    f"tier={row.tier}"
+                )
+
+    return "\n".join(lines) + "\n"
+
+def print_top_risk_groups(summary: dict, *, group_col: str, top_n: int = 5) -> None:
+    by_group=summary.get("by_group")
+    if not by_group:
+        print("\nTop Risk Groups: (no by_group data found in summary)")
+        return
+ 
+    df_bg = pd.DataFrame(by_group)
+
+    # Be defensive: ensure expected columns exist
+    required_cols = [group_col, "exposure_at_risk_pct", "slope_bps_per_q", "latest_flag", "tier"]
+    missing = [c for c in required_cols if c not in df_bg.columns]
+    if missing:
+        print(f"\nTop Risk Groups: missing columns in by_group summary: {missing}")
+        print("Available:", df_bg.columns.tolist())
+        return
+
+    df_bg_sorted = df_bg.sort_values(
+        ["exposure_at_risk_pct", "slope_bps_per_q","latest_flag"],
+        ascending=[False, False,False],
+        kind="mergesort",
+    )
+
+    print(f"\nTop Risk Groups (ranked by EaR% → slope → latest_flag) | group_col={group_col}")
+    
+    for i, row in enumerate(df_bg_sorted.head(top_n).itertuples(index=False), start=1):
+        group_value = getattr(row, group_col)  # row.Sector if group_col="Sector"
+        # row.group is the name of the group value (e.g., "Retail")
+        print(
+            f"{i}. {str(group_value):12s} | "
+            f"EaR={row.exposure_at_risk_pct:5.1f}% | "
+            f"slope={row.slope_bps_per_q:5.1f} bps/q | "
+            f"latest_flag={int(row.latest_flag)} | "
+            f"tier={row.tier}"
+        )
 
 def make_demo_df(seed: int = 42) -> pd.DataFrame:
     """Synthetic multi-sector dataset just to test portfolio mode end-to-end."""
@@ -63,20 +154,47 @@ def read_input_csv(path: Path) -> pd.DataFrame:
         raise ValueError(f"Input CSV is empty: {path}")
     return df
 
-def write_outputs(df_final: pd.DataFrame, summary: dict, out_dir: Path) -> None:
+def write_outputs(df_final: pd.DataFrame, summary: dict, out_dir: Path, *, group_col: str) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     df_path = out_dir / "df_final.csv"
     summary_path = out_dir / "summary.json"
-
+    report_path = out_dir / "report.txt"
+    # 1) Machine outputs
     df_final.to_csv(df_path, index=False)
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
 
-    print("Wrote:")
-    print(f" - {df_path}")
-    print(f" - {summary_path}")
+    wrote = [df_path, summary_path]
+    # ---- NEW: portfolio outputs ----
+    if "by_group" in summary:
+        by_group_df = pd.DataFrame(summary["by_group"])
+        by_group_csv = out_dir / "by_group.csv"
+        by_group_json = out_dir / "by_group.json"
 
+        # Sort like a risk report: highest EaR%, then steepest slope, then latest_flag
+        sort_cols = ["exposure_at_risk_pct", "slope_bps_per_q", "latest_flag"]
+        for c in sort_cols:
+            if c not in by_group_df.columns:
+                raise KeyError((f"by_group is missing expected column: {c}. Available: {by_group_df.columns.tolist()}"))
+        by_group_df = by_group_df.sort_values(
+            by=sort_cols,
+            ascending=[False,False,False],
+            kind="mergesort",
+        )
+        by_group_df.to_csv(by_group_csv,index=False)
+        with open(by_group_json, "w", encoding="utf-8") as f:
+            json.dump(summary["by_group"], f, indent=2)
+        wrote += [by_group_csv,by_group_json]
+    # 3) Human output (always)
+    report_text = build_report_text(summary, group_col=group_col, top_n=5)
+    report_path.write_text(report_text, encoding="utf-8")
+    wrote.append(report_path)    
+        
+    print("Wrote:")
+    for p in wrote:
+        print(f" - {p}")
+   
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Run RiskOS PD trend + Exposure-at-Risk pipeline on demo data or an input CSV."
@@ -171,6 +289,7 @@ def main() -> None:
     seed_prev_pd_1 = _nan_to_none(args.seed_prev_pd_1)
     seed_prev_pd_2 = _nan_to_none(args.seed_prev_pd_2)
     
+
     if input_path is None:
         df = make_demo_df(seed=args.demo_seed)
         if not args.portfolio:
@@ -204,7 +323,7 @@ def main() -> None:
         seed_prev_pd_2=seed_prev_pd_2,
     )
 
-    write_outputs(df_final, summary, out_dir)
+    write_outputs(df_final, summary, out_dir,group_col=args.group_col)
     
     if args.portfolio:
         print("\nPortfolio headline:")
@@ -213,6 +332,7 @@ def main() -> None:
             f"Groups={p['n_groups']} | TotalExp={p['total_exposure']:,.0f} | "
             f"EaR={p['exposure_at_risk_pct']:.1f}% ({p['exposure_at_risk']:,.0f} / {p['total_exposure']:,.0f})"
         )
+        print_top_risk_groups(summary, group_col=args.group_col, top_n=3)
     else:
         print_headline(summary)
 

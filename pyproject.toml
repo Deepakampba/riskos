@@ -13,6 +13,9 @@ dependencies = [
   "pandas",
 ]
 
+[project.scripts]
+riskos = "riskos.cli:main"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 
