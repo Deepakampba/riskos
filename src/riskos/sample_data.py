@@ -24,6 +24,7 @@ def generate_quarters(start: str = "2023-Q1", n: int = 8) -> List[str]:
     return out
 
 
+
 def make_sample_df(
     *,
     mode: Mode = "portfolio",
@@ -74,6 +75,7 @@ def make_sample_df(
         df = pd.concat([df, dup], ignore_index=True)
 
     return df
+
 
 
 def write_sample_csv(df: pd.DataFrame, out_path: Path) -> Path:

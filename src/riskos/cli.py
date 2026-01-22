@@ -13,7 +13,7 @@ from typing import Optional, Any, Dict
 from riskos.doctor import doctor_csv, print_doctor_report
 from riskos.sample_data import make_sample_df, write_sample_csv
 import numpy as np
-import pandas as pd
+import pandas as pd 
 from uuid import uuid4
 from riskos.pipeline import run_pd_trend_and_ear, run_portfolio_pd_trend_and_ear
 from riskos.validation import DataContract, normalize_and_aggregate, validate_single_series
@@ -346,26 +346,14 @@ def write_outputs(
     *,
     group_col: Optional[str] = None,
     run_info: Optional[dict] = None,
-    meta: Optional[dict] = None,
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    meta_path = out_dir / "meta.json"
     df_path = out_dir / "df_final.csv"
     summary_path = out_dir / "summary.json"
     report_path = out_dir / "report.txt"
-    wrote = [df_path, summary_path]
-    wrote.append(meta_path)
-    wrote.append(report_path)
+    wrote = [df_path, summary_path, report_path]
 
     df_final.to_csv(df_path, index=False)
-    # save meta.json
-    with open(meta_path, "w", encoding="utf-8") as f:
-        json.dump(meta, f, indent=2)
-    # put meta into summary.json too (nice for one-file machine read)
-    summary_with_meta = dict(summary)
-    summary_with_meta["meta"] = meta
-    with open(meta_path,"w",encoding="utf-8") as f:
-        json.dump(summary_with_meta, f, indent=2)
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
     # ---- NEW: portfolio outputs ----
@@ -403,7 +391,6 @@ def write_outputs(
         run_info=run_info,
     )
     report_path.write_text(report_text, encoding="utf-8")
-    wrote.append(report_path)
 
     print("Wrote:")
     for path in wrote:
@@ -432,6 +419,16 @@ def build_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="Path to input CSV. If omitted, runs on synthetic demo data.",
+    )
+    run_p.add_argument(
+        "--fail-on-warn",
+        action="store_true",
+        help="In strict mode, treat WARN as failure (exit 2).",
+    )
+    run_p.add_argument(
+        "--strict",
+        action="store_true",
+        help="Run doctor' preflight checks first and abort on FAIL.",
     )
     run_p.add_argument(
         "--out",
@@ -535,6 +532,12 @@ def build_parser() -> argparse.ArgumentParser:
             default="2023-Q1"
             )
     sample_p.add_argument(
+        "--sectors",
+        type=int,
+        default=4,
+        help="Number of sectors (default: 4)"
+    )
+    sample_p.add_argument(
         "--no-duplicate",
           action="store_true",
             help="Do not inject a duplicate row")
@@ -591,7 +594,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         argv = ["run", *argv]
     args = parser.parse_args(argv)
     if args.command == "doctor":
-        
+        input_path = Path(args.input).expanduser().resolve()
         contract = DataContract(
             quarter_col=args.quarter_col,
             group_col=args.group_col,
@@ -599,13 +602,18 @@ def main(argv: Optional[list[str]] = None) -> None:
             exposure_col=args.exposure_col,
 
         )
-        rep=doctor_csv(Path(args.input), contract=contract, allow_pd_gt1=args.allow_pd_gt1)
+        rep = doctor_csv(
+            input_path,
+            contract=contract,
+            allow_pd_gt1=getattr(args, "allow_pd_gt1", False),
+        )
         print_doctor_report(rep)
-       # optional exit code behavior (nice for CI later) 
-       # OK -> 0, WARN -> 0, FAIL -> 2
-        if rep.get("status") == "FAIL":
-         raise SystemExit(2)
+        status = str(rep.get("status", "")).upper()
+        if status == "FAIL" or (status == "WARN" and getattr(args, "fail_on_warn", False)):
+            raise SystemExit(2)
         raise SystemExit(0)
+
+        
     if args.command == "make-sample":
         df=make_sample_df(
             mode=args.mode,
