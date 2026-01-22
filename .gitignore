@@ -27,6 +27,12 @@ env/
 .coverage
 htmlcov/
 
+# data: ignore all, but keep curated samples
+data/*
+!data/.gitkeep
+!data/sample_*.csv
+!data/README.md
+ 
 # ---- Build artifacts ----
 build/
 dist/
@@ -34,3 +40,4 @@ dist/
 
 # ---- Outputs (generated) ----
 outputs/
+!outputs/.gitkeep
