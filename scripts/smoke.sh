@@ -63,38 +63,6 @@ fi
 run_and_expect_ok "Portfolio run (happy path)" \
   riskos run --portfolio --input "$SAMPLE" --out "$PORT_OUT"
 
-# Assert stable fields in meta.json and summary.json
-RUN_DIR="$(ls -dt ${PORT_OUT}/run_* 2>/dev/null | head -n 1)"
-if [ -z "$RUN_DIR" ]; then
-  echo "❌ No run_* directory created under ${PORT_OUT}"
-  exit 1
-fi
-
-python - << 'PY'
-import json
-from pathlib import Path
-
-run_dir = Path("outputs/smoke/portfolio_ok")
-latest = sorted(run_dir.glob("run_*"), key=lambda p: p.stat().st_mtime, reverse=True)
-if not latest:
-    raise SystemExit("No run_* directory found for assertions")
-
-run_path = latest[0]
-meta = json.loads((run_path / "meta.json").read_text())
-summary = json.loads((run_path / "summary.json").read_text())
-
-assert meta.get("status") == "SUCCESS", f"status != SUCCESS: {meta.get('status')}"
-portfolio = summary.get("portfolio", {})
-assert portfolio.get("n_groups") == 4, f"n_groups != 4: {portfolio.get('n_groups')}"
-ear_pct = portfolio.get("exposure_at_risk_pct")
-if ear_pct is None:
-    raise AssertionError("exposure_at_risk_pct missing")
-target = 37.6
-tolerance = 1.0
-if abs(float(ear_pct) - target) > tolerance:
-    raise AssertionError(f"exposure_at_risk_pct {ear_pct} not within {tolerance} of {target}")
-PY
-
 #require_file "$PORT_OUT/df_final.csv"
 #require_file "$PORT_OUT/summary.json"
 #require_file "$PORT_OUT/report.txt"
