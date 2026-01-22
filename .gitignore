@@ -41,3 +41,6 @@ dist/
 # ---- Outputs (generated) ----
 outputs/
 !outputs/.gitkeep
+
+# ----- Data ----
+data/
