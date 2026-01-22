@@ -1,0 +1,25 @@
+[run]
+branch = True
+source = riskos
+parallel = True
+
+[report]
+show_missing = True
+skip_covered = True
+precision = 1
+
+# Exclude CLI / entrypoints and other non-core glue
+omit =
+    */riskos/cli.py
+    */riskos/doctor.py
+    */riskos/__main__.py
+    */riskos/*/__init__.py
+    */riskos/__init__.py
+
+# Optional: ignore typical non-testable lines
+exclude_lines =
+    pragma: no cover
+    if __name__ == "__main__":
+    raise NotImplementedError
+    pass
+    \.\.\.
