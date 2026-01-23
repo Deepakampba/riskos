@@ -17,7 +17,9 @@ import pandas as pd
 from uuid import uuid4
 from riskos.pipeline import run_pd_trend_and_ear, run_portfolio_pd_trend_and_ear
 from riskos.validation import DataContract, normalize_and_aggregate, validate_single_series
-
+from riskos.defaults import (
+    DEFAULT_EXPOSURE_COL,DEFAULT_GROUP_COL,DEFAULT_PD_COL,DEFAULT_QUARTER_COL,DEFAULT_SEED_PREV_PD_1,DEFAULT_SEED_PREV_PD_2,DEFAULT_SLOPE_TH,DEFAULT_TOP_N
+)
 
 def write_meta(
     out_dir: Path,
@@ -439,20 +441,28 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_p.add_argument(
         "--slope-th",
-        type=float,
-        default=0.0015,
+        default=DEFAULT_SLOPE_TH,
         help="Slope threshold for deterioration flag (PD per quarter). Default 0.0015 (~15 bps/q).",
     )
     run_p.add_argument(
+        "--pd-col",
+        default=DEFAULT_PD_COL,
+        help="Slope threshold for deterioration flag (PD per quarter). Default 0.0015 (~15 bps/q).",
+    )
+    run_p.add_argument(
+        "--group-col",
+        default=DEFAULT_GROUP_COL,
+        help="Sector Default",
+    )
+    run_p.add_argument(
         "--seed-prev-pd-1",
-        type=float,
-        default=0.019,
+        default=DEFAULT_SEED_PREV_PD_1,
         help="Seed PD for T-1 before first row (default: 0.019). Use 'nan' to disable seeding.",
     )
     run_p.add_argument(
         "--seed-prev-pd-2",
         type=float,
-        default=0.018,
+        default=DEFAULT_SEED_PREV_PD_2,
         help="Seed PD for T-2 before first row (default: 0.018). Use 'nan' to disable seeding.",
     )
 
@@ -469,11 +479,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run per-group portfolio mode",
     )
-    run_p.add_argument(
-        "--group-col",
-        default="Sector",
-        help="Column to group by in portfolio mode",
-    )
+    
     doctor_p=subparsers.add_parser(
         "doctor",
         help="Inspect an input CSV and report data-quality issues."
@@ -790,7 +796,7 @@ def main(argv: Optional[list[str]] = None) -> None:
             f"Groups={p['n_groups']} | TotalExp={p['total_exposure']:,.0f} | "
             f"EaR={p['exposure_at_risk_pct']:.1f}% ({p['exposure_at_risk']:,.0f} / {p['total_exposure']:,.0f})"
         )
-        print_top_risk_groups(summary, group_col=args.group_col, top_n=3)
+        print_top_risk_groups(summary, group_col=args.group_col, top_n=DEFAULT_TOP_N)
     else:
         print_headline(summary)
 

@@ -7,6 +7,7 @@ import pytest
 
 from riskos.pipeline import run_portfolio_pd_trend_and_ear
 from riskos.validation import DataContract, normalize_and_aggregate
+from riskos.defaults import DEFAULT_SLOPE_TH,DEFAULT_SEED_PREV_PD_1,DEFAULT_SEED_PREV_PD_2
 
 
 def test_golden_portfolio_summary_stable() -> None:
@@ -24,7 +25,7 @@ def test_golden_portfolio_summary_stable() -> None:
     df = normalize_and_aggregate(df, contract=contract)
 
     # Run portfolio pipeline
-    df_final, summary = run_portfolio_pd_trend_and_ear(df, group_col="Sector",slope_th=0.0015,seed_prev_pd_1=0.019,seed_prev_pd_2=0.018,)
+    df_final, summary = run_portfolio_pd_trend_and_ear(df, group_col="Sector",slope_th=DEFAULT_SLOPE_TH,seed_prev_pd_1=DEFAULT_SEED_PREV_PD_1,seed_prev_pd_2=DEFAULT_SEED_PREV_PD_2,)
 
     # --- Stable assertions ---
     assert "portfolio" in summary
